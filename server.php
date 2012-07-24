@@ -18,5 +18,5 @@
 		}
 	}
 	// To initialize the server the following things must be in your script
-	$server = new Server("192.168.0.50","9093",false,"myCallBackFunction","MyExample");
+	$server = new Server("127.0.0.1","9093",false,"myCallBackFunction","MyExample");
 	// new Server(HOST,PORT,DEBUGGING,FUNCTION,CLASS)
