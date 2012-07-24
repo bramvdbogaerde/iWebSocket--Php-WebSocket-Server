@@ -24,7 +24,14 @@ class Server extends Frames{
 	     $this->createServer($server,$port,$debuging);
 	}
 	public function createServer($host,$port,$debuging){
-		$socket = stream_socket_server("tcp://".$host.":".$port,$errno,$errstr);
+		$socket = socket_create(AF_INET,SOCK_STREAM,SOL_TCP);
+        socket_set_option($socket, SOL_SOCKET, SO_REUSEADDR, 1);
+		socket_bind($socket,$host,$port);
+		socket_listen($socket);
+        /* This is very important to have multiple connections at know socket at the same time: 
+           */ socket_set_nonblock($socket); /*
+           But it blocks socket_accept to accept the connections 
+           I'm currently searching for a solution for that */
 		if(!$socket){
 			echo "Server isn't started \n";
 			echo "$errstr($errno)";
@@ -40,40 +47,33 @@ class Server extends Frames{
 			echo "\nListening for connections";
 			echo "\n==============================";
 			do{
-				if(!!$connection = stream_socket_accept($socket)){
-					echo "\nClient is trying to connect";
-					$msg = fread($connection,1020);
-					if(!in_array($connection,self::$connections)){
-						$current = $this->currentnumber;
-						$max = $this->numberofconnections;
-						if($max > $current){
-							echo "\nDoing handshake";
-							$msg = $this->doHandShake($msg);
-							fwrite($connection,$msg);
-							array_push(self::$connections,$connection);
-							$this->currentnumber = $this->currentnumber+1;
-							echo "\nClient is connected";
-							unset($connection);
-						}
-						else{
-							echo "\nMax number clients connected";
-						}
-					}
-					}
-					$i = 0;
-					foreach(self::$connections as $user){
-						$msg = fread($user,1020);
-						if(!$msg){
-							echo "\nClient ofline";
-							$this->currentnumber = $this->currentnumber-1;
-							unset(self::$connections[$i]);
-						}
-						else{
-							$this->proccessMessages($msg,$user);
-						}
-						$i = $i+1;
-					}
-					$i = 0;
+				    if (($connection = @socket_accept($socket)) === false) {
+      				  echo "socket_accept() failed: reason: " . socket_strerror(socket_last_error($socket)) . "\n";
+      				  break;
+    				}
+    				else{
+						echo "\nConnected client";
+    				}
+
+    				do{
+    				   if (false === ($msg = @socket_read($connection, 2048))) {
+           					echo "socket_read() failed: reason: " . socket_strerror(socket_last_error($connection)) . "\n";
+           					break 2;
+       					}
+       					else{
+
+       						if(!in_array($connection,self::$connections)){
+								echo "\n New client is trying to connect";
+								echo "\n Doing handshake";
+								$result = $this->doHandShake($msg);
+								socket_write($connection,$result,strlen($result));
+								array_push(self::$connections,$connection);
+							}
+							else{
+								$this->proccessMessages($msg,$connection);
+							}
+       					}	
+       				}while(true);
 			}while(true);
 		}
 	}
@@ -81,7 +81,7 @@ class Server extends Frames{
 	public function onData(){
 		if(stream_select(self::$connections,$w = null,$ex = null,$this->maxDisconnectTime) > 0){
 			foreach(self::$connections as $user){
-					$msg = fread($user,1020);
+					$msg = socket_read($user,1020);
 					$this->proccessMessages($msg,$user);
 				}
 		}
@@ -121,7 +121,7 @@ class Server extends Frames{
 	}
 	function sendToUser($user,$msg){
 		$msg = self::hybi10Encode($msg);
-		fwrite($user,$msg,strlen($msg));
+		socket_write($user,$msg,strlen($msg));
 	}
 	function sendToAll($msg){
 		foreach(self::$connections as $user){
@@ -132,4 +132,3 @@ class Server extends Frames{
 		$this->$numberofconnections = $number;
 	}
 }
-
